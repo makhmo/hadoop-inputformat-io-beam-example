@@ -11,14 +11,14 @@
     <url>http://maven.apache.org</url>
 
     <properties>
-        <beam.version>2.3.0</beam.version>
+        <beam.version>2.11.0</beam.version>
         <maven-compiler-plugin.version>3.6.2</maven-compiler-plugin.version>
         <compiler.error.flag>-Werror</compiler.error.flag>
         <compiler.default.pkginfo.flag>-Xpkginfo:always</compiler.default.pkginfo.flag>
         <compiler.default.exclude>nothing</compiler.default.exclude>
         <hadoop.version>2.7.2</hadoop.version>
         <orc.version>1.4.3</orc.version>
-        <gcp.connector.version>1.7.0</gcp.connector.version>
+        <gcp.connector.version>1.9.4</gcp.connector.version>
         <guava.version>20.0</guava.version>
     </properties>
 
@@ -32,7 +32,13 @@
 
         <dependency>
             <groupId>org.apache.beam</groupId>
-            <artifactId>beam-sdks-java-io-hadoop-input-format</artifactId>
+            <artifactId>beam-runners-direct-java</artifactId>
+            <version>${beam.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.beam</groupId>
+            <artifactId>beam-sdks-java-io-hadoop-format</artifactId>
             <version>${beam.version}</version>
         </dependency>
 
@@ -83,6 +89,7 @@
             <artifactId>guava</artifactId>
             <version>${guava.version}</version>
         </dependency>
+
 
     </dependencies>
 

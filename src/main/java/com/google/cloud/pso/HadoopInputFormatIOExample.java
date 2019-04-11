@@ -27,7 +27,7 @@ import org.apache.beam.sdk.coders.AvroCoder;
 import org.apache.beam.sdk.io.AvroIO;
 import org.apache.beam.sdk.io.FileBasedSink;
 import org.apache.beam.sdk.io.fs.ResourceId;
-import org.apache.beam.sdk.io.hadoop.inputformat.HadoopInputFormatIO;
+import org.apache.beam.sdk.io.hadoop.format.HadoopFormatIO;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.options.Validation;
@@ -50,14 +50,14 @@ import java.nio.charset.StandardCharsets;
  * An example pipeline that uses HadoopInputFormatIO to read files from GCS using a
  * HadoopInputFormat class.
  *
- * <p>In this example class, {@link HadoopInputFormatIO}, we will:
+ * <p>In this example class, {@link HadoopFormatIO}, we will:
  *
  * <pre>
  *     1. Read Orc files (in GCS) using the OrcInputFormat via HadoopInputFormatIO Beam transform
  *     2. Convert OrcStruct to Avro GenericRecord
  *     3. Write Avro GenericRecords to GCS via AvroIO Beam transform
  * </pre>
- *
+ * <p>
  * The pipeline would need the following required flags: --runner=DataflowRunner
  * --project=project-id --stagingLocation=gcs-staging-location
  * --inputDir=gcs-input-directory-with-orc-files --outputDir=gcs-output-directory-with-avro-files
@@ -68,115 +68,115 @@ import java.nio.charset.StandardCharsets;
  * should have the required read privileges on the buckets for the source files and schema.
  *
  * @see <a
- *     href="https://orc.apache.org/api/orc-mapreduce/index.html?org/apache/orc/mapreduce/OrcInputFormat.html">OrcInputFormat</a>)
+ * href="https://orc.apache.org/api/orc-mapreduce/index.html?org/apache/orc/mapreduce/OrcInputFormat.html">OrcInputFormat</a>)
  */
 public class HadoopInputFormatIOExample {
 
-  private static final String INPUT_FORMAT_KEY = "mapreduce.job.inputformat.class";
+    private static final String INPUT_FORMAT_KEY = "mapreduce.job.inputformat.class";
 
-  private static final String KEY_CLASS_KEY = "key.class";
+    private static final String KEY_CLASS_KEY = "key.class";
 
-  private static final String VALUE_CLASS_KEY = "value.class";
+    private static final String VALUE_CLASS_KEY = "value.class";
 
-  private static final String INPUT_DIR_KEY = "mapreduce.input.fileinputformat.inputdir";
+    private static final String INPUT_DIR_KEY = "mapreduce.input.fileinputformat.inputdir";
 
-  private static final String OPTIONAL_PREFIX = "output";
+    private static final String OPTIONAL_PREFIX = "output";
 
-  private interface Options extends DataflowPipelineOptions {
+    private interface Options extends DataflowPipelineOptions {
 
-    @Description("GCS path for Orc files (input)")
-    @Validation.Required
-    String getInputDir();
+        @Description("GCS path for Orc files (input)")
+        @Validation.Required
+        String getInputDir();
 
-    void setInputDir(String inputDir);
+        void setInputDir(String inputDir);
 
-    @Description("GCS path for Avro files (output)")
-    @Validation.Required
-    String getOutputDir();
+        @Description("GCS path for Avro files (output)")
+        @Validation.Required
+        String getOutputDir();
 
-    void setOutputDir(String outputDir);
+        void setOutputDir(String outputDir);
 
-    @Description("Schema file GCS location")
-    @Validation.Required
-    String getSchemaFile();
+        @Description("Schema file GCS location")
+        @Validation.Required
+        String getSchemaFile();
 
-    void setSchemaFile(String schemaFile);
-  }
-
-  /**
-   * Helper method to extract an Avro Schema object from the json file in GCS.
-   *
-   * @param options Options to extract schema file GCS path from
-   * @return {@link Schema} Avro schema object from the json schema
-   * @throws IOException
-   */
-  private static Schema getSchemaFromPath(Options options) throws IOException {
-
-    GcsUtil gcsUtil = options.getGcsUtil();
-    GcsPath gcsPath = GcsPath.fromUri(options.getSchemaFile());
-
-    int bufferSize = (int) gcsUtil.fileSize(gcsPath);
-    String schemaString;
-    try (SeekableByteChannel sbc = gcsUtil.open(gcsPath)) {
-      ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
-      sbc.read(buffer);
-      buffer.flip();
-      schemaString = new String(buffer.array(), StandardCharsets.UTF_8);
+        void setSchemaFile(String schemaFile);
     }
 
-    return new Schema.Parser().parse(schemaString);
-  }
+    /**
+     * Helper method to extract an Avro Schema object from the json file in GCS.
+     *
+     * @param options Options to extract schema file GCS path from
+     * @return {@link Schema} Avro schema object from the json schema
+     * @throws IOException
+     */
+    private static Schema getSchemaFromPath(Options options) throws IOException {
 
-  private static String getOutputPathWithPrefix(Options options) {
-    String outputPath = options.getOutputDir();
-    ResourceId outputResourceId = FileBasedSink.convertToFileResourceIfPossible(outputPath);
-    return (outputResourceId.isDirectory()) ? outputPath + OPTIONAL_PREFIX : outputPath;
-  }
+        GcsUtil gcsUtil = options.getGcsUtil();
+        GcsPath gcsPath = GcsPath.fromUri(options.getSchemaFile());
 
-  public static void main(String[] args) throws IOException {
-    Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
+        int bufferSize = (int) gcsUtil.fileSize(gcsPath);
+        String schemaString;
+        try (SeekableByteChannel sbc = gcsUtil.open(gcsPath)) {
+            ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
+            sbc.read(buffer);
+            buffer.flip();
+            schemaString = new String(buffer.array(), StandardCharsets.UTF_8);
+        }
 
-    run(options);
-  }
+        return new Schema.Parser().parse(schemaString);
+    }
 
-  private static PipelineResult run(Options options) throws IOException {
+    private static String getOutputPathWithPrefix(Options options) {
+        String outputPath = options.getOutputDir();
+        ResourceId outputResourceId = FileBasedSink.convertToFileResourceIfPossible(outputPath);
+        return (outputResourceId.isDirectory()) ? outputPath + OPTIONAL_PREFIX : outputPath;
+    }
 
-    Pipeline pipeline = Pipeline.create(options);
+    public static void main(String[] args) throws IOException {
+        Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
 
-    Schema schema = getSchemaFromPath(options);
+        run(options);
+    }
 
-    pipeline.getCoderRegistry().registerCoderForClass(GenericRecord.class, AvroCoder.of(schema));
+    private static PipelineResult run(Options options) throws IOException {
 
-    Configuration hadoopConf = HadoopConfiguration.get(options);
+        Pipeline pipeline = Pipeline.create(options);
 
-    // OrcInputFormat requires the following 4 properties to be set
-    hadoopConf.setClass(INPUT_FORMAT_KEY, OrcInputFormat.class, InputFormat.class);
+        Schema schema = getSchemaFromPath(options);
 
-    hadoopConf.setClass(KEY_CLASS_KEY, NullWritable.class, Object.class);
+        pipeline.getCoderRegistry().registerCoderForClass(GenericRecord.class, AvroCoder.of(schema));
 
-    hadoopConf.setClass(VALUE_CLASS_KEY, OrcStruct.class, Object.class);
+        Configuration hadoopConf = HadoopConfiguration.get(options);
 
-    hadoopConf.set(INPUT_DIR_KEY, options.getInputDir());
+        // OrcInputFormat requires the following 4 properties to be set
+        hadoopConf.setClass(INPUT_FORMAT_KEY, OrcInputFormat.class, InputFormat.class);
 
-    // A simple function to convert an OrcStruct object to a GenericRecord object
-    SimpleFunction<OrcStruct, GenericRecord> simpleFunction =
-        new OrcStructToAvroFn(schema.toString());
+        hadoopConf.setClass(KEY_CLASS_KEY, NullWritable.class, Object.class);
 
-    String resolvedOutputPath = getOutputPathWithPrefix(options);
+        hadoopConf.setClass(VALUE_CLASS_KEY, OrcStruct.class, Object.class);
 
-    pipeline
-        .apply(
-            "Read Orc files",
-            HadoopInputFormatIO.<NullWritable, GenericRecord>read()
-                .withConfiguration(hadoopConf)
-                .withValueTranslation(simpleFunction))
-        .apply("Extract GenericRecord Values", Values.create())
-        .apply(
-            "Write GenericRecords to Avro files",
-            AvroIO.writeGenericRecords(schema)
-                .withCodec(CodecFactory.snappyCodec())
-                .to(resolvedOutputPath));
+        hadoopConf.set(INPUT_DIR_KEY, options.getInputDir());
 
-    return pipeline.run();
-  }
+        // A simple function to convert an OrcStruct object to a GenericRecord object
+        SimpleFunction<OrcStruct, GenericRecord> simpleFunction =
+                new OrcStructToAvroFn(schema.toString());
+
+        String resolvedOutputPath = getOutputPathWithPrefix(options);
+
+        pipeline
+                .apply(
+                        "Read Orc files",
+                        HadoopFormatIO.<NullWritable, GenericRecord>read()
+                                .withConfiguration(hadoopConf)
+                                .withValueTranslation(simpleFunction))
+                .apply("Extract GenericRecord Values", Values.create())
+                .apply(
+                        "Write GenericRecords to Avro files",
+                        AvroIO.writeGenericRecords(schema)
+                                .withCodec(CodecFactory.snappyCodec())
+                                .to(resolvedOutputPath));
+
+        return pipeline.run();
+    }
 }
