@@ -17,25 +17,25 @@ package com.google.cloud.pso.transformation;
 
 import org.apache.avro.generic.GenericRecord;
 import org.apache.beam.sdk.transforms.SimpleFunction;
+import org.apache.commons.lang.builder.ReflectionToStringBuilder;
 import org.apache.orc.TypeDescription;
-import org.apache.orc.mapred.OrcStruct;
 import org.apache.orc.mapred.OrcValue;
 
 /**
- * A helper class {@link AvroToOrcStructFn} that converts a GenericRecord {@link GenericRecord} to a
+ * A helper class {@link AvroToStringFn} that converts a GenericRecord {@link GenericRecord} to a
  * OrcValue {@link OrcValue}
  */
-public class AvroToOrcStructFn extends SimpleFunction<GenericRecord, OrcValue> {
+public class AvroToStringFn extends SimpleFunction<GenericRecord, String> {
 
     private TypeDescription orcSchema;
 
-    public AvroToOrcStructFn(TypeDescription orcSchema) {
+    public AvroToStringFn(TypeDescription orcSchema) {
         this.orcSchema = orcSchema;
     }
 
     @Override
-    public OrcValue apply(GenericRecord input) {
-        return new OrcValue(AvroToOrcUtils.convertToORCObject(orcSchema, input));
+    public String apply(GenericRecord input) {
+        return ReflectionToStringBuilder.toString(new OrcValue(AvroToOrcUtils.convertToORCObject(orcSchema, input)));
     }
 
 

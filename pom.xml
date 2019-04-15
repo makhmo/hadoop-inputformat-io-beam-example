@@ -17,9 +17,9 @@
         <compiler.default.pkginfo.flag>-Xpkginfo:always</compiler.default.pkginfo.flag>
         <compiler.default.exclude>nothing</compiler.default.exclude>
         <hadoop.version>2.7.2</hadoop.version>
-        <orc.version>1.4.3</orc.version>
-        <gcp.connector.version>1.9.4</gcp.connector.version>
-        <guava.version>20.0</guava.version>
+        <orc.version>1.5.5</orc.version>
+        <gcp.connector.version>1.9.16</gcp.connector.version>
+        <guava.version>23.0</guava.version>
     </properties>
 
     <dependencies>
@@ -52,12 +52,40 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
             <version>${hadoop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>log4j</artifactId>
+                    <groupId>log4j</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs</artifactId>
+            <version>${hadoop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>log4j</artifactId>
+                    <groupId>log4j</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
             <groupId>org.apache.orc</groupId>
             <artifactId>orc-mapreduce</artifactId>
             <version>${orc.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-common</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -66,23 +94,29 @@
             <version>${orc.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>com.google.cloud.bigdataoss</groupId>
-            <artifactId>util</artifactId>
-            <version>${gcp.connector.version}</version>
-        </dependency>
+        <!--<dependency>-->
+            <!--<groupId>com.google.cloud.bigdataoss</groupId>-->
+            <!--<artifactId>util</artifactId>-->
+            <!--<version>${gcp.connector.version}</version>-->
+        <!--</dependency>-->
 
         <dependency>
             <groupId>com.google.cloud.bigdataoss</groupId>
             <artifactId>gcs-connector</artifactId>
-            <version>${gcp.connector.version}-hadoop2</version>
+            <version>hadoop2-${gcp.connector.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>log4j</artifactId>
+                    <groupId>log4j</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
-        <dependency>
-            <groupId>com.google.cloud.bigdataoss</groupId>
-            <artifactId>gcsio</artifactId>
-            <version>${gcp.connector.version}</version>
-        </dependency>
+        <!--<dependency>-->
+            <!--<groupId>com.google.cloud.bigdataoss</groupId>-->
+            <!--<artifactId>gcsio</artifactId>-->
+            <!--<version>${gcp.connector.version}</version>-->
+        <!--</dependency>-->
 
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -143,20 +177,6 @@
                 </executions>
             </plugin>
 
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>1.5.0</version>
-                <configuration>
-                    <cleanupDaemonThreads>false</cleanupDaemonThreads>
-                    <systemProperties>
-                        <systemProperty>
-                            <key>java.util.logging.config.file</key>
-                            <value>logging.properties</value>
-                        </systemProperty>
-                    </systemProperties>
-                </configuration>
-            </plugin>
         </plugins>
     </build>
 

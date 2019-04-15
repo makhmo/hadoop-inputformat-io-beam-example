@@ -7,31 +7,21 @@ import org.apache.hadoop.io.*;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.mapred.OrcList;
 import org.apache.orc.mapred.OrcStruct;
-import org.apache.orc.mapred.OrcUnion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 public class AvroToOrcUtils {
+    private static final Logger LOG = LoggerFactory.getLogger(AvroToOrcUtils.class);
 
     public static WritableComparable convertToORCObject(TypeDescription typeInfo, Object o) {
+        LOG.trace("{}({},  {}) <<", "convertToORCObject", typeInfo.getId(),  o.getClass().getName());
+
         if (o != null) {
-            if (TypeDescription.Category.UNION.equals(typeInfo.getCategory())) {
-                OrcUnion union = new OrcUnion(typeInfo);
-                // Avro uses Utf8 and GenericData.EnumSymbol objects instead of Strings. This is handled in other places in the method, but here
-                // we need to determine the union types from the objects, so choose String.class if the object is one of those Avro classes
-                Class clazzToCompareTo = o.getClass();
-                if (o instanceof org.apache.avro.util.Utf8 || o instanceof GenericData.EnumSymbol) {
-                    clazzToCompareTo = String.class;
-                }
-                // TODO: Implementation
-                return union;
-            }
             if (o instanceof Integer) {
                 return new IntWritable((int) o);
             }
@@ -54,82 +44,50 @@ public class AvroToOrcUtils {
                 return new BytesWritable(((ByteBuffer) o).array());
             }
             if (o instanceof int[]) {
-                int[] intArray = (int[]) o;
-                OrcList<WritableComparable<IntWritable>> ret = new OrcList<WritableComparable<IntWritable>>(TypeDescription.createInt());
-                Arrays.stream(intArray)
-                        .forEach((element) -> ret.add(convertToORCObject(TypeDescription.createInt(), element)));
-                return  ret;
+                int[] array = (int[]) o;
+                OrcList<IntWritable> ret = new OrcList<IntWritable>(TypeDescription.createInt(), array.length);
+                Arrays.stream(array).forEach(e -> ret.add(new IntWritable(e)));
+
+                return ret;
             }
             if (o instanceof long[]) {
-                long[] longArray = (long[]) o;
-                OrcList<WritableComparable<LongWritable>> ret = new OrcList<WritableComparable<LongWritable>>(TypeDescription.createLong());
-                Arrays.stream(longArray)
-                        .forEach((element) -> ret.add(convertToORCObject(TypeDescription.createLong(), element)));
-                return  ret;
-            }
-            if (o instanceof float[]) {
-                float[] floatArray = (float[]) o;
-                OrcList<WritableComparable<FloatWritable>> ret = new OrcList<WritableComparable<FloatWritable>>(TypeDescription.createFloat());
-                IntStream.range(0, floatArray.length)
-                        .mapToDouble(i -> floatArray[i])
-                        .forEach((element) -> ret.add(convertToORCObject(TypeDescription.createFloat(), element)));
-                return  ret;
+                long[] array = (long[]) o;
+                OrcList<LongWritable> ret = new OrcList<LongWritable>(TypeDescription.createLong(), array.length);
+                Arrays.stream(array).forEach(e -> ret.add(new LongWritable(e)));
+
+                return ret;
             }
             if (o instanceof double[]) {
-                double[] doubleArray = (double[]) o;
-                OrcList<WritableComparable<DoubleWritable>> ret = new OrcList<WritableComparable<DoubleWritable>>(TypeDescription.createDouble());
-                Arrays.stream(doubleArray)
-                        .forEach((element) -> ret.add(convertToORCObject(TypeDescription.createDouble(), element)));
-                return  ret;
-            }
-            if (o instanceof boolean[]) {
-                boolean[] booleanArray = (boolean[]) o;
+                double[] array = (double[]) o;
+                OrcList<DoubleWritable> ret = new OrcList<DoubleWritable>(TypeDescription.createDouble(), array.length);
+                Arrays.stream(array).forEach(e -> ret.add(new DoubleWritable(e)));
 
-                OrcList<WritableComparable<BooleanWritable>> ret = new OrcList<WritableComparable<BooleanWritable>>(TypeDescription.createBoolean());
-                IntStream.range(0, booleanArray.length)
-                        .map(i -> booleanArray[i] ? 1 : 0)
-                        .forEach((element) -> ret.add(convertToORCObject(TypeDescription.createBoolean(), element == 1)));
-                return  ret;
-
+                return ret;
             }
+
             if (o instanceof GenericData.Array) {
                 GenericData.Array array = ((GenericData.Array) o);
-                // The type information in this case is interpreted as a List
-                TypeDescription listTypeInfo = typeInfo.getChildren().get(0);
-                // array.stream().map((element) -> convertToORCObject(listTypeInfo, element)).collect(Collectors.toList());
-            }
-            if (o instanceof List) {
-//                return o;
-            }
-            if (o instanceof Map) {
-                Map map = new HashMap();
-                TypeDescription keyInfo = typeInfo.getChildren().get(0);
-                TypeDescription valueInfo = typeInfo.getChildren().get(1);
-                // Unions are not allowed as key/value types, so if we convert the key and value objects,
-                // they should return Writable objects
-                ((Map) o).forEach((key, value) -> {
-                    Object keyObject = convertToORCObject(keyInfo, key);
-                    Object valueObject = convertToORCObject(valueInfo, value);
-                    if (keyObject == null) {
-                        throw new IllegalArgumentException("Maps' key cannot be null");
-                    }
-                    map.put(keyObject, valueObject);
-                });
-//                return map;
+                TypeDescription orcType = getOrcFieldType(array.getSchema());
+                OrcList ret = new OrcList(orcType, array.size());
+                for (Object e : array) {
+                    ret.add(convertToORCObject(orcType, e));
+                }
+                return ret;
             }
             if (o instanceof GenericData.Record) {
                 GenericData.Record record = (GenericData.Record) o;
+                OrcStruct ret = new OrcStruct(getOrcFieldType(record.getSchema()));
                 List<Schema.Field> recordFields = record.getSchema().getFields();
                 if (recordFields != null) {
-                    Object[] fieldObjects = new Object[recordFields.size()];
                     for (int i = 0; i < recordFields.size(); i++) {
                         Schema.Field field = recordFields.get(i);
                         Schema fieldSchema = field.schema();
                         Object fieldObject = record.get(field.name());
-                        fieldObjects[i] = convertToORCObject(getOrcField(fieldSchema), fieldObject);
+                        TypeDescription orcType = getOrcFieldType(fieldSchema);
+                        ret.setFieldValue(i, convertToORCObject(orcType, fieldObject));
                     }
-//                    return createOrcStruct(typeInfo, fieldObjects);
                 }
+                return ret;
             }
             throw new IllegalArgumentException("Error converting object of type " + o.getClass().getName() + " to ORC type " + typeInfo);
         } else {
@@ -138,7 +96,7 @@ public class AvroToOrcUtils {
     }
 
 
-    public static TypeDescription getOrcField(Schema fieldSchema) throws IllegalArgumentException {
+    public static TypeDescription getOrcFieldType(Schema fieldSchema) throws IllegalArgumentException {
         Schema.Type fieldType = fieldSchema.getType();
 
         switch (fieldType) {
@@ -159,7 +117,7 @@ public class AvroToOrcUtils {
                     // Ignore null types in union
                     List<TypeDescription> orcFields = unionFieldSchemas.stream().filter(
                             unionFieldSchema -> !Schema.Type.NULL.equals(unionFieldSchema.getType()))
-                            .map(AvroToOrcUtils::getOrcField)
+                            .map(AvroToOrcUtils::getOrcFieldType)
                             .collect(Collectors.toList());
 
                     // Flatten the field if the union only has one non-null element
@@ -167,20 +125,20 @@ public class AvroToOrcUtils {
                         return orcFields.get(0);
                     } else {
                         TypeDescription union = TypeDescription.createUnion();
-                        orcFields.stream().forEach( o -> union.addUnionChild(o));
+                        orcFields.stream().forEach(o -> union.addUnionChild(o));
 
-                        return  union;
+                        return union;
                     }
                 }
                 return null;
 
             case ARRAY:
-                return TypeDescription.createList(getOrcField(fieldSchema.getElementType()));
+                return TypeDescription.createList(getOrcFieldType(fieldSchema.getElementType()));
 
             case MAP:
                 return TypeDescription.createMap(
                         getPrimitiveOrcTypeFromPrimitiveAvroType(Schema.Type.STRING),
-                        getOrcField(fieldSchema.getValueType()));
+                        getOrcFieldType(fieldSchema.getValueType()));
 
             case RECORD:
                 List<Schema.Field> avroFields = fieldSchema.getFields();
@@ -188,7 +146,7 @@ public class AvroToOrcUtils {
                 if (avroFields != null) {
                     avroFields.forEach(avroField -> {
                         String fieldName = avroField.name();
-                        record.addField(fieldName, getOrcField(avroField.schema()));
+                        record.addField(fieldName, getOrcFieldType(avroField.schema()));
                     });
                     return record;
                 }
@@ -227,18 +185,5 @@ public class AvroToOrcUtils {
             default:
                 throw new IllegalArgumentException("Avro type " + avroType.getName() + " is not a primitive type");
         }
-    }
-
-    public static OrcStruct createOrcStruct(TypeDescription typeInfo, WritableComparable... objs) {
-
-
-        List<TypeDescription> fields = typeInfo.getChildren();
-
-        OrcStruct result = new OrcStruct(typeInfo);
-
-        for (int i = 0; i < fields.size(); i++) {
-            result.setFieldValue(fields.get(i).getId(), objs[i]);
-        }
-        return result;
     }
 }
