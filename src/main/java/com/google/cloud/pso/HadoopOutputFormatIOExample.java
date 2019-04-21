@@ -170,10 +170,11 @@ public class HadoopOutputFormatIOExample {
 
         Pipeline pipeline = Pipeline.create(options);
 
-        Schema schema = getSchemaFromPath(options);
+        Schema avroSchema = getSchemaFromPath(options);
+        TypeDescription orcSchema = AvroToOrcUtils.getOrcFieldType(avroSchema);
         String resolvedOutputPath = getOutputPathWithPrefix(options);
 
-        pipeline.getCoderRegistry().registerCoderForClass(GenericRecord.class, AvroCoder.of(schema));
+       // pipeline.getCoderRegistry().registerCoderForClass(GenericRecord.class, AvroCoder.of(avroSchema));
 
         Configuration hadoopConf = HadoopConfiguration.get(options);
 
@@ -184,27 +185,21 @@ public class HadoopOutputFormatIOExample {
 
         hadoopConf.setClass(VALUE_CLASS_KEY, OrcValue.class, Object.class);
         hadoopConf.setClass("orc.mapred.value.type", OrcValue.class, Object.class);
+        hadoopConf.setClass("mapreduce.map.output.value.class", OrcValue.class, Object.class);
 
         hadoopConf.set(OUTPUT_DIR_KEY, resolvedOutputPath);
-        hadoopConf.set("orc.mapred.output.schema", AvroToOrcUtils.getOrcFieldType(schema).toString());
-        hadoopConf.set("orc.mapred.map.output.value.schema", AvroToOrcUtils.getOrcFieldType(schema).toString());
+        hadoopConf.set("orc.mapred.output.schema", orcSchema.toString());
+        hadoopConf.set("orc.mapred.map.output.value.schema", orcSchema.toString());
         hadoopConf.set("mapreduce.job.id", String.valueOf(System.currentTimeMillis()));
 
-        hadoopConf.setClass("mapreduce.map.output.value.class", OrcValue.class, Object.class);
         hadoopConf.setInt("mapreduce.job.reduces", 1);
 
-        // A simple function to convert an GenericRecord object to a OrcStruct
-        SimpleFunction<GenericRecord, OrcValue> simpleFunction =
-                new AvroToOrcStructFn(AvroToOrcUtils.getOrcFieldType(schema));
-
-        SimpleFunction<GenericRecord, String> simpleStringFunction =
-                new AvroToStringFn(AvroToOrcUtils.getOrcFieldType(schema));
+        SimpleFunction<GenericRecord, OrcValue> avroToOrcStructFn = new AvroToOrcStructFn(orcSchema);
 
         PCollection<GenericRecord> records =
-                pipeline.apply("Read Avro", AvroIO.readGenericRecords(schema)
+                pipeline.apply("Read Avro", AvroIO.readGenericRecords(avroSchema)
                         .from(options.getInputDir()));
-        records.apply("Convert Avro to Orc", MapElements.via(simpleFunction)).setCoder(new OrcValueCoder(AvroToOrcUtils.getOrcFieldType(schema)))
-//                .apply(ParDo.of(new PrintOrcValue()));
+        records.apply("Convert Avro to Orc", MapElements.via(avroToOrcStructFn)).setCoder(new OrcValueCoder(orcSchema))
                 .apply(MapElements.via(new SimpleFunction<OrcValue, KV<NullWritable, OrcValue>>() {
                                            @Override
                                            public KV<NullWritable, OrcValue> apply(OrcValue input) {
@@ -215,6 +210,8 @@ public class HadoopOutputFormatIOExample {
 //                .apply(" Windowing ", Window.into(FixedWindows.of(Duration.standardSeconds(10))))
                 .apply("Write ORC", HadoopFormatIO.<NullWritable, OrcValue>write().withConfiguration(hadoopConf).withPartitioning()
                         .withExternalSynchronization(new HDFSSynchronization(options.getLockDir())));
+
+
 
         return pipeline.run();
     }
